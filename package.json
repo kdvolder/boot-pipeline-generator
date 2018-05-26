@@ -1,0 +1,67 @@
+{
+  "name": "pipeline-builder",
+  "version": "0.0.0",
+  "description": "Generator that creates a simple concourse pipeline to deploy a spring-boot app to a PKS kubernetes cluster.",
+  "license": "MIT",
+  "repository": "git@github.com:kdvolder/boot-pipeline-generator.git",
+  "author": {
+    "name": "Kris De Volder",
+    "email": "kdevolder@pivotal.io",
+    "url": "https://github.com/kdvolder"
+  },
+  "keywords": [
+    "generator", "concourse", "spring-boot", "kubernetes", "helm"
+  ],
+  "files": [
+    "lib"
+  ],
+  "main": "lib/pipeline-builder.js",
+  "typings": "lib/pipeline-builder.d.ts",
+  "scripts": {
+    "clean": "rimraf lib && rimraf coverage",
+    "format": "prettier --write \"{src,__tests__}/**/*.ts\" --single-quote --trailing-comma es5",
+    "lint": "tslint --force --format verbose \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "prebuild": "npm run clean && npm run format && npm run lint && echo Using TypeScript && tsc --version",
+    "build": "tsc --pretty",
+    "test": "jest",
+    "coverage": "jest --coverage",
+    "watch": "npm run build -- --watch",
+    "watch:test": "jest --watch"
+  },
+  "dependencies": {
+    "@types/readline-sync": "^1.4.3",
+    "@types/shelljs": "^0.8.0",
+    "js-yaml": "^3.11.0",
+    "readline-sync": "^1.4.9",
+    "shelljs": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^3.11.1",
+    "@types/jest": "^22.0.1",
+    "@types/node": "^8.0.0",
+    "coveralls": "^2.0.0",
+    "jest": "^22.0.4",
+    "prettier": "^1.5.2",
+    "rimraf": "^2.0.0",
+    "ts-jest": "^22.0.1",
+    "ts-node": "^3.2.0",
+    "tslint": "^5.0.0",
+    "tslint-config-prettier": "^1.1.0",
+    "typescript": "^2.3.0"
+  },
+  "engines": {
+    "node": ">=6.0.0"
+  },
+  "jest": {
+    "transform": {
+      ".(ts)": "<rootDir>/node_modules/ts-jest/preprocessor.js"
+    },
+    "testRegex": "(/__tests__/.*|\\.(test|spec))\\.(ts|js)$",
+    "moduleFileExtensions": [
+      "ts",
+      "js"
+    ],
+    "testEnvironment": "node"
+  }
+}
