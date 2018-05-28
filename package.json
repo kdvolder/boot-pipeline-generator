@@ -10,10 +10,18 @@
     "url": "https://github.com/kdvolder"
   },
   "keywords": [
-    "generator", "concourse", "spring-boot", "kubernetes", "helm"
+    "generator",
+    "concourse",
+    "spring-boot",
+    "kubernetes",
+    "helm"
   ],
+  "bin": {
+    "pks-ci-init": "./lib/pipeline-builder.js"
+  },
   "files": [
-    "lib"
+    "lib",
+    "templates"
   ],
   "main": "lib/pipeline-builder.js",
   "typings": "lib/pipeline-builder.d.ts",
@@ -22,7 +30,7 @@
     "format": "prettier --write \"{src,__tests__}/**/*.ts\" --single-quote --trailing-comma es5",
     "lint": "tslint --force --format verbose \"src/**/*.ts\"",
     "prepublishOnly": "npm run build",
-    "prebuild": "npm run clean && npm run format && npm run lint && echo Using TypeScript && tsc --version",
+    "prebuild": "npm run clean && npm run lint && echo Using TypeScript && tsc --version",
     "build": "tsc --pretty",
     "test": "jest",
     "coverage": "jest --coverage",

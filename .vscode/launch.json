@@ -9,7 +9,7 @@
       "request": "launch",
       "name": "Debug file",
       "program": "${workspaceRoot}/lib/pipeline-builder.js",
-      "cwd": "${workspaceRoot}",
+      "cwd": "/home/kdvolder/tmp/hello-world-service",
       "sourceMaps": true,
       "smartStep": true,
       "preLaunchTask": "build",

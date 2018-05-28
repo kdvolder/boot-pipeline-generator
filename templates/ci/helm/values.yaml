@@ -3,4 +3,5 @@
 # Declare variables to be passed into your templates.
 
 app_name: ${app_name}
+docker_image: ${docker_image}
 replicas: 1
