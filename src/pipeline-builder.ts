@@ -126,7 +126,11 @@ function storeValuesYaml(valuesFile: string, values: any) {
   fs.writeFileSync(valuesFile, jsyaml.safeDump(values));
 }
 
-function interactiveResolver(defaults: Resolver): CachingResolver {
+export interface UserQuestioner {
+  (msg : string) : string
+}
+
+function interactiveResolver(defaults: Resolver, question: UserQuestioner): CachingResolver {
   let alreadyAsked = new Set<string>();
   let cache = new Map<string, string>();
 
@@ -139,11 +143,11 @@ function interactiveResolver(defaults: Resolver): CachingResolver {
       //We don't have a practical way to readline multi-line input. So just use the default as is.
       return defaultValue;
     }
-    let answer = readline.question(msg) || defaultValue || '';
+    let answer = question(msg) || defaultValue || '';
     cache.set(varname, answer);
     return answer;
   }
-
+  
   let resolve: any = (varname: string) => {
     if (!alreadyAsked.has(varname)) {
       alreadyAsked.add(varname);
@@ -280,7 +284,7 @@ function multilineYamlString(str : string) : string {
   return '|\n  ' + str.replace(/\n/gm, '\n  ').trim();
 }
 
-function generate_stuff() {
+export function generate_pipeline(questioner : UserQuestioner) {
   //shell.rm('-rf', './ci');
 
   let defaults = new RecursiceResolverBuilder();
@@ -334,7 +338,7 @@ function generate_stuff() {
     }
     return 'INSERT_FULL_CONTENTS_OF_KUBE_CONFIG_FILE';
   });
-  let resolver = interactiveResolver(defaults.build());
+  let resolver = interactiveResolver(defaults.build(), questioner);
   let te = new STE(resolver, TEMPLATES, '.');
   te.process();
 
@@ -344,5 +348,3 @@ function generate_stuff() {
   });
   console.log(`=========================`);
 }
-
-generate_stuff();

@@ -8,7 +8,7 @@
       "type": "node",
       "request": "launch",
       "name": "Debug file",
-      "program": "${workspaceRoot}/lib/pipeline-builder.js",
+      "program": "${workspaceRoot}/lib/cli.js",
       "cwd": "/home/kdvolder/tmp/hello-world-service",
       "sourceMaps": true,
       "smartStep": true,

@@ -1,6 +1,6 @@
 {
-  "name": "pipeline-builder",
-  "version": "0.0.0",
+  "name": "@pivotal-tools/pipeline-builder",
+  "version": "0.0.2",
   "description": "Generator that creates a simple concourse pipeline to deploy a spring-boot app to a PKS kubernetes cluster.",
   "license": "MIT",
   "repository": "git@github.com:kdvolder/boot-pipeline-generator.git",
@@ -17,7 +17,7 @@
     "helm"
   ],
   "bin": {
-    "pks-ci-init": "./lib/pipeline-builder.js"
+    "pks-ci-init": "./lib/cli.js"
   },
   "files": [
     "lib",
