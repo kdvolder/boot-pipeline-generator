@@ -9,7 +9,7 @@ import * as readline from 'readline-sync';
 const TEMPLATES = path.resolve(__dirname, '../templates');
 
 interface Resolver {
-  (variable: string): string | undefined;
+  (variable: string): Promise<string | undefined>;
 }
 
 interface CachingResolver extends Resolver {
@@ -45,14 +45,15 @@ class STE {
     return this.var_re(filePath) !== null;
   }
 
-  process(): void {
-    fswalk(this.templates, '.', {
-      doWithFile: (f, r) => this.processFile(f, r),
-      doWithDir: (f, r) => this.processDir(f, r),
+  async process(): Promise<void> {
+    await fswalk(this.templates, '.', {
+      doWithFile: async (f, r) => await this.processFile(f, r),
+      doWithDir: async (f, r) => await this.processDir(f, r),
     });
   }
 
-  private processFile(p: string, relativePath: string): void {
+  private async processFile(p: string, relativePath: string): Promise<void> {
+    console.log('f: ', p);
     let target = path.resolve(this.outputPath, relativePath);
     let basename = path.basename(target);
     if (basename.startsWith('_')) {
@@ -61,7 +62,7 @@ class STE {
     }
     let var_re = this.var_re(p);
     if (var_re) {
-      let rendered = this.renderTemplate(var_re, fs.readFileSync(p, 'UTF8'));
+      let rendered = await this.renderTemplate(var_re, fs.readFileSync(p, 'UTF8'));
       fs.writeFileSync(target, rendered);
       if (isExecutable(p)) {
         fs.chmodSync(target, '755');
@@ -71,19 +72,29 @@ class STE {
     }
   }
 
-  private renderTemplate(re: RegExp, template: string) {
+  private async renderTemplate(re: RegExp, template: string) : Promise<string> {
+    let varnames = new Set<string>();
+    //Hack: collect all varnames first because resolving them needs to be done with async shite now.
+    template.replace(re, (mtch: string, ...more: any[]) => {
+      varnames.add(more[0]);
+      return mtch;
+    });
+
+    let map = new Map<string, string>();
+    let iter = varnames.values();
+    let varname = iter.next().value;
+    while (varname) {
+      map.set(varname, await this.resolver(varname) || '');
+      varname = iter.next().value;
+    }
     return template.replace(re, (mtch: string, ...more: any[]) => {
       let varname = more[0];
-      let resolved = this.resolver(varname);
-      if (typeof resolved === 'string') {
-        return resolved;
-      } else {
-        return mtch;
-      }
+      return map.get(varname) || mtch;
     });
   }
 
-  private processDir(p: string, relativePath: string): void {
+  private async processDir(p: string, relativePath: string): Promise<void> {
+    console.log('d: ', p);
     shell.mkdir('-p', path.resolve(this.outputPath, relativePath));
   }
 }
@@ -95,23 +106,23 @@ interface Var {
 }
 
 interface PathHandlers {
-  doWithFile: (file: string, relativePath: string) => void;
-  doWithDir: (dir: string, relativePath: string) => void;
+  doWithFile: (file: string, relativePath: string) => Promise<void>;
+  doWithDir: (dir: string, relativePath: string) => Promise<void>;
 }
 
-function fswalk(root: string, relative_path: string, handlers: PathHandlers) {
+async function fswalk(root: string, relative_path: string, handlers: PathHandlers) : Promise<void> {
   let p = path.resolve(root, relative_path);
   const stat = fs.statSync(p);
   if (stat.isDirectory()) {
-    handlers.doWithDir(p, relative_path);
+    await handlers.doWithDir(p, relative_path);
     let entries = fs.readdirSync(p);
     for (let index = 0; index < entries.length; index++) {
       const name = entries[index];
       let relativeChild = path.join(relative_path, name);
-      fswalk(root, relativeChild, handlers);
+      await fswalk(root, relativeChild, handlers);
     }
   } else if (stat.isFile()) {
-    handlers.doWithFile(p, relative_path);
+    await handlers.doWithFile(p, relative_path);
   }
 }
 
@@ -127,37 +138,35 @@ function storeValuesYaml(valuesFile: string, values: any) {
 }
 
 export interface UserQuestioner {
-  (msg : string) : string
+  (property : string, defaultValue ?: string) : Promise<string>
 }
 
 function interactiveResolver(defaults: Resolver, question: UserQuestioner): CachingResolver {
   let alreadyAsked = new Set<string>();
   let cache = new Map<string, string>();
 
-  function ask(varname: string): string {
-    let defaultValue = defaults(varname);
-    let msg = defaultValue
-      ? `Enter '${varname}' (default '${defaultValue}'): `
-      : `Enter '${varname}' : `;
+  async function ask(varname: string): Promise<string> {
+    let defaultValue = await defaults(varname);
     if (defaultValue && defaultValue.indexOf('\n')>=0) {
       //We don't have a practical way to readline multi-line input. So just use the default as is.
       return defaultValue;
     }
-    let answer = question(msg) || defaultValue || '';
-    cache.set(varname, answer);
+    let answer = await question(varname, defaultValue) || defaultValue || '';
+    cache.set(varname, await answer);
     return answer;
   }
   
-  let resolve: any = (varname: string) => {
+  let resolve : Resolver = async (varname: string) => {
     if (!alreadyAsked.has(varname)) {
       alreadyAsked.add(varname);
-      return ask(varname);
+      return await ask(varname);
     }
     return cache.get(varname) || '';
   };
-  resolve.cache = cache;
+  let cr : any = resolve;
+  cr.cache = cache;
 
-  return resolve;
+  return cr;
 }
 
 function appNameFromGitRepo(repoUri: string | undefined): string | undefined {
@@ -192,7 +201,7 @@ function usernameFromGitRepo(repoUri: string | undefined): string | undefined {
 }
 
 interface RecursiveResolverFunction {
-  (self: Resolver): string | undefined;
+  (self: Resolver): Promise<string | undefined>;
 }
 
 function escapeYaml(str : string) : string {
@@ -206,12 +215,12 @@ function or(
   r1: RecursiveResolverFunction,
   r2: RecursiveResolverFunction
 ): RecursiveResolverFunction {
-  return (self: Resolver) => r1(self) || r2(self);
+  return async (self: Resolver) => await r1(self) || await r2(self);
 }
 
 class RecursiceResolverBuilder {
   private resolvers = new Map<string, RecursiveResolverFunction>();
-  private self: Resolver = name => this.resolve(name);
+  private self: Resolver = async name => await this.resolve(name);
   private cache = new Map<string, string>();
 
   public loadDefaults(yamlValuesFile : string) : void {
@@ -237,7 +246,7 @@ class RecursiceResolverBuilder {
     this.resolvers.set(name, resolveFun);
   }
 
-  private resolve(name: string, chain?: string[]): string | undefined {
+  private async resolve(name: string, chain?: string[]): Promise<string | undefined> {
     if (this.cache.has(name)) {
       return this.cache.get(name);
     }
@@ -251,7 +260,7 @@ class RecursiceResolverBuilder {
     if (!propertyResolver) {
       resolved = `CHANGEME_${name}`;
     } else {
-      resolved = propertyResolver(this.self);
+      resolved = await propertyResolver(this.self);
     }
     console.log(`${name} => '${resolved}'`);
     if (resolved) {
@@ -284,18 +293,16 @@ function multilineYamlString(str : string) : string {
   return '|\n  ' + str.replace(/\n/gm, '\n  ').trim();
 }
 
-export function generate_pipeline(questioner : UserQuestioner) {
+export async function generate_pipeline(questioner : UserQuestioner) : Promise<void> {
   //shell.rm('-rf', './ci');
 
   let defaults = new RecursiceResolverBuilder();
 
   defaults.loadDefaults('ci/secrets.yml');
 
-  defaults.add('git_repo_uri', resolve =>
-    exec('git config --get remote.origin.url').trim()
-  );
-  defaults.add('https_git_repo_uri', resolve => {
-    let uri = resolve('git_repo_uri');
+  defaults.add('git_repo_uri', async resolve => exec('git config --get remote.origin.url').trim());
+  defaults.add('https_git_repo_uri', async resolve => {
+    let uri = await resolve('git_repo_uri');
     // Example: uri = 'git@github.com:kdvolder/hello-boot-pks.git'
     // should become: 'https://github.com/kdvolder/hello-boot-pks.git')
     if (uri && uri.startsWith('git@')) {
@@ -303,32 +310,31 @@ export function generate_pipeline(questioner : UserQuestioner) {
     }
     return uri;
   });
-  defaults.add(
-    'git_branch',
-    resolve => exec('git rev-parse --abbrev-ref HEAD').trim() || 'master'
+  defaults.add('git_branch', async resolve => 
+    exec('git rev-parse --abbrev-ref HEAD').trim() || 'master'
   );
-  defaults.add('app_name', resolve =>
-    appNameFromGitRepo(resolve('git_repo_uri'))
+  defaults.add('app_name', async resolve =>
+    appNameFromGitRepo(await resolve('git_repo_uri'))
   );
-  defaults.add('docker_tag', resolve => tagForBranch(resolve('git_branch')));
-  defaults.add('docker_repo', resolve => {
-    let user = resolve('docker_user');
-    return `${resolve('docker_user')}/${resolve('app_name')}`;
+  defaults.add('docker_tag', async resolve => tagForBranch(await resolve('git_branch')));
+  defaults.add('docker_repo', async resolve => {
+    let user = await resolve('docker_user');
+    return `${await resolve('docker_user')}/${await resolve('app_name')}`;
   });
-  defaults.add('docker_image', resolve => 
-    `${resolve('docker_repo')}:${resolve('docker_tag')}`
+  defaults.add('docker_image', async resolve => 
+    `${await resolve('docker_repo')}:${await resolve('docker_tag')}`
   );
-  defaults.add('docker_user', resolve => getDockerUser());
-  defaults.add('git_user', resolve =>
-    usernameFromGitRepo(resolve('git_repo_uri'))
+  defaults.add('docker_user', async resolve => getDockerUser());
+  defaults.add('git_user', async resolve =>
+    usernameFromGitRepo(await resolve('git_repo_uri'))
   );
-  defaults.add('helm_release_name', resolve => 
-    resolve('app_name') + '-' + resolve('git_branch')
+  defaults.add('helm_release_name', async resolve => 
+    await resolve('app_name') + '-' + await resolve('git_branch')
   );
-  defaults.add('pipeline_name', resolve =>
-    resolve('app_name')+'-'+resolve('git_branch')
+  defaults.add('pipeline_name', async resolve =>
+    await resolve('app_name')+'-'+await resolve('git_branch')
   );
-  defaults.add('kube_config', resolve => {
+  defaults.add('kube_config', async resolve => {
     let home = process.env.HOME;
     if (home) {
       let kube_config_file = path.resolve(home, '.kube', 'config'); 
@@ -340,7 +346,7 @@ export function generate_pipeline(questioner : UserQuestioner) {
   });
   let resolver = interactiveResolver(defaults.build(), questioner);
   let te = new STE(resolver, TEMPLATES, '.');
-  te.process();
+  await te.process();
 
   console.log(`=========================`);
   resolver.cache.forEach((v, k) => {
